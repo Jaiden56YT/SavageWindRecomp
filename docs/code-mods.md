@@ -12,7 +12,7 @@ Nothing here is supported by the Savage Wind authors: don't report problems with
 | System | Status |
 |---|---|
 | macOS, Apple silicon | Runs: the game on MoltenVK, and the co-op mod in it (two copies, with Ryujinx and Switch players). |
-| Windows | **Never run.** The changed runtime files pass a syntax check for 64-bit Windows, and the mod's generated code compiles for it (portable C for floating point, as on every x86 PC). The socket code and the hook table's export are written for Windows and untested. |
+| Windows | **Never run.** The app builds on Windows (this branch's `Windows` check on GitHub, the MSYS2 build), and the mod's generated code compiles for it (portable C for floating point, as on every x86 PC). The game code with a mod in it has not been built or started there: the socket code and the hook table's export are written for Windows and untested. |
 | Linux | Never run. |
 
 ## How a mod gets in
