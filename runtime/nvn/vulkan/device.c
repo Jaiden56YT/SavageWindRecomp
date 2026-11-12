@@ -118,7 +118,13 @@ static void create_instance(void) {
                              .applicationVersion = ver, .pEngineName = engine, .engineVersion = ver,
                              .apiVersion = VK_API_VERSION_1_3};
     LOG("[vk] application version %u.%u.%u (Savage Wind %s)\n", vmaj, vmin, vpatch * 100 + vpre, rt_version());
+#ifdef __APPLE__  // MoltenVK is a "portability" driver: the loader only lists it when asked to
+    ext[n_ext++] = "VK_KHR_portability_enumeration";
+#endif
     VkInstanceCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .pApplicationInfo = &app,
+#ifdef __APPLE__
+                               .flags = 0x00000001 /* VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR */,
+#endif
                                .enabledExtensionCount = n_ext, .ppEnabledExtensionNames = ext,
                                .enabledLayerCount = validate ? 1 : 0, .ppEnabledLayerNames = layers};
     VkResult r = vkCreateInstance(&ci, NULL, &g_vk.inst);
@@ -977,6 +983,9 @@ static void create_device(void) {
     bool two_q = g_vk.qfam_count >= 2 && pt_env && strcmp(pt_env, "0") != 0;
     VkDeviceQueueCreateInfo qi = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, .queueFamilyIndex = g_vk.qfam,
                                   .queueCount = two_q ? 2 : 1, .pQueuePriorities = prio};
+#ifdef __APPLE__  // (MoltenVK: a device that has it must be created with it)
+    if (has_ext(ep, ne, "VK_KHR_portability_subset")) ext[n_ext++] = "VK_KHR_portability_subset";
+#endif
     {   // (each once: NGX's list, above, may name one the device enables for itself below)
         uint32_t k = 0;
         for (uint32_t i = 0; i < n_ext; i++) {

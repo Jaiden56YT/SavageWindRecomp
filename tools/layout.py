@@ -52,17 +52,27 @@ def foreign(exefs):
     return [n for n in LOAD_ORDER if n.startswith('subsdk') and n not in known and os.path.isfile(os.path.join(exefs, n))]
 
 
+def mods(exefs):
+    """The foreign subsdk modules to load as mods: those with a manifest, <name>.mod, next to them (tools/mod_add.py)."""
+    return [n for n in foreign(exefs) if os.path.isfile(os.path.join(exefs, n + '.mod'))]
+
+
 def compute(exefs):
     """[(name, base, size, build_id)] of the modules in an exefs folder, in load order."""
     out, base = [], MODULES_LO
     skip = foreign(exefs)
+    load = mods(exefs)
     for name in skip:
-        print(f"layout: {name} is not one of the game's modules (a mod?): left out", file=sys.stderr)
-    for name in LOAD_ORDER:
+        if name not in load:
+            print(f"layout: {name} is not one of the game's modules (a mod?): left out", file=sys.stderr)
+    # A mod goes after the sdk, not where the console's loader would put it (before): the game's own modules keep
+    # their addresses, so the code generated for them stays as it is with and without mods.
+    for name in [n for n in LOAD_ORDER if n not in skip] + load:
         path = os.path.join(exefs, name)
-        if os.path.isfile(path) and name not in skip:
+        if os.path.isfile(path):
             h = header(path)
-            out.append((name, base, image_size(h), h['build_id']))
+            base = (base + 0x1fffff) & ~0x1fffff if name in load else base  # (2 MiB aligned: a new mod build of
+            out.append((name, base, image_size(h), h['build_id']))         #  another size moves nothing else)
             base += out[-1][2]
     return out
 

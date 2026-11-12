@@ -2174,7 +2174,8 @@ static void begin_pass(void) {
         static int dedup = -1;
         if (dedup < 0) dedup = getenv("SAVAGEWIND_VK_DEDUP_ATTACHMENTS") &&
                               atoi(getenv("SAVAGEWIND_VK_DEDUP_ATTACHMENTS")) != 0;
-        if (g_vk.is_mali || dedup) {  // BOTW binds targets 1 / 3 again as 2 / 4, never writing the duplicates.
+        // (Apple's GPUs are tilers too: through MoltenVK the duplicates left 32x32 tiles of the G-buffer black)
+        if (g_vk.is_mali || g_vk.props.vendorID == 0x106B || dedup) {  // BOTW binds targets 1 / 3 again as 2 / 4, never writing the duplicates.
             // Twice is undefined in Vulkan; an unwritten slot can store loaded contents over the drawn one.
             // Keep only the first view. Its pipeline format is retained; the duplicate stays UNDEFINED.
             int dup = -1;

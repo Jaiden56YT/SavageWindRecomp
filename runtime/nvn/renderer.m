@@ -367,8 +367,15 @@ static id<MTLTexture> view_texture(NvnTexture *t, const NvnTextureView *v, bool 
     NSUInteger nlv = (v->setmask & 1) && v->num_levels ? v->num_levels : base.mipmapLevelCount - lv0;
     NSUInteger ly0 = (v->setmask & 2) ? v->min_layer : 0;
     NSUInteger nly = (v->setmask & 2) && v->num_layers ? v->num_layers : base.arrayLength - ly0;
-    if (base.textureType == MTLTextureTypeCube) nly = 6;
     MTLTextureType type = base.textureType;
+    if (type == MTLTextureTypeCube) {
+        // a cube has 6 slices (arrayLength is 1). As a render target a view can name some of its faces (ClearTexture
+        // of one face of the 256x256 cubes while the terrain loads: min_layer 1 with all 6 asked for went past the end)
+        if (render && (v->setmask & 2) && ly0 < 6) {
+            nly = v->num_layers && ly0 + v->num_layers <= 6 ? v->num_layers : (ly0 ? 1 : 6);
+            if (nly < 6 && nly != 1) type = MTLTextureType2DArray;
+        } else { ly0 = 0; nly = 6; }
+    }
     if (render && (type == MTLTextureType2DArray || type == MTLTextureTypeCube) && nly == 1) type = MTLTextureType2D;
     if (lv0 + nlv > base.mipmapLevelCount) nlv = base.mipmapLevelCount - lv0;
     if (pf == base.pixelFormat && lv0 == 0 && nlv == base.mipmapLevelCount && ly0 == 0 && type == base.textureType)

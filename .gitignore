@@ -45,3 +45,11 @@ docs/RAMAS.md
 /amiibo/
 /amiibo_data/
 /vk_pipelines.seed
+
+# the co-op mod's files, written by its setup (botw-coop tools/coop_setup.py --recomp): made from game files
+/coop/
+/play-coop.cmd
+/play-coop.sh
+# local build logs
+/*.log
+/build-*/

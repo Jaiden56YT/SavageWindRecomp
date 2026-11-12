@@ -26,14 +26,14 @@
 #include "../settings.h"
 #include "output_scale.h"
 
-#ifndef __APPLE__
+#ifndef SW_METAL
 extern bool vk_dlss_available(void);
 #endif
 
 #define MAX_TEX 16384.0
 #define SCENE_LINES 900.0  // the height of the game's 3D scene targets (docked)
 
-#ifndef __APPLE__
+#ifndef SW_METAL
 bool fsr3_available(void);  // (vulkan/fsr3.h: built in)
 bool fsr4_available(void);  // (vulkan/fsr_api.h: AMD's DLLs, on an AMD Radeon)
 #endif
@@ -47,7 +47,7 @@ bool fsr3_upscaler_enabled(void) {
 }
 
 bool upscaler_available(int u) {
-#ifdef __APPLE__
+#ifdef SW_METAL
     return u == UPSCALE_OFF || u == UPSCALE_METALFX;
 #else
     return u == UPSCALE_OFF || u == UPSCALE_FSR1 || (u == UPSCALE_FSR3 && fsr3_available() && fsr3_upscaler_enabled())
@@ -58,7 +58,7 @@ bool upscaler_available(int u) {
 
 // FSR 4 is on this PC (an AMD Radeon, AMD's DLLs found), whether or not it is held back (the menu says which)
 bool fsr4_offered(void) {
-#ifdef __APPLE__
+#ifdef SW_METAL
     return false;
 #else
     return fsr4_available();
@@ -83,7 +83,7 @@ double upscale_mode_factor(int q) {
 // that only with SAVAGEWIND_SCALE_TARGETS=1 (untested with BOTW); SAVAGEWIND_NO_SCALE=1 turns it off (game sizes).
 bool upscale_modes_available(void) {
     static int on = -1;
-#ifdef __APPLE__
+#ifdef SW_METAL
     if (on < 0) on = getenv("SAVAGEWIND_SCALE_TARGETS") && !getenv("SAVAGEWIND_NO_SCALE");
 #else
     if (on < 0) on = !getenv("SAVAGEWIND_NO_SCALE");
@@ -115,7 +115,7 @@ void output_scale(double dw, double dh, bool reshape_allowed, OutScale *o) {
     bool reshape = reshape_allowed && fabs(shape - 1.0) > 0.005 && !framepace_title_ui() && !framepace_loading_ui();
     if (!reshape) shape = 1.0;
     // render height in units of the Switch's 1080 lines: the window's (Metal: divided by the upscaler's factor)
-#ifdef __APPLE__
+#ifdef SW_METAL
     double out_div = upscale_factor(), scene_div = 1.0;
 #else
     double out_div = 1.0, scene_div = upscale_factor();

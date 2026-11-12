@@ -3,7 +3,7 @@
 // here: an old forest at a sunlit clearing, the icon's plain sword (docs/icon/icon.svg) in a mossy stone, the grass
 // swaying, petals and fireflies. The menu sits on the left, so the clearing is on the right. The start screen lays its
 // dark banners over either, which keep its text readable.
-#ifdef __APPLE__
+#ifdef SW_METAL
 #import <Metal/Metal.h>
 #endif
 #include <algorithm>
@@ -20,7 +20,7 @@
 
 extern "C" {
 #include "paths.h"
-#ifdef __APPLE__
+#ifdef SW_METAL
 void *ui_metal_device(void);
 #else
 uint64_t vk_imgui_texture_rgba(const void *rgba, int w, int h);  // runtime/nvn/vulkan/imgui_glue.cpp
@@ -31,7 +31,7 @@ void vk_imgui_texture_free(uint64_t tex);
 // ------------------------------------------------------------------ the player's picture
 static ImTextureID g_tex;
 static int g_tex_w, g_tex_h;
-#ifdef __APPLE__
+#ifdef SW_METAL
 static id<MTLTexture> g_mtl_tex;  // (ImGui only holds the pointer)
 #endif
 
@@ -49,7 +49,7 @@ void splash_load(void) {
         fprintf(stderr, "[splash] %s: %s, using the default art\n", path, rt_image_error());
         return;
     }
-#ifdef __APPLE__
+#ifdef SW_METAL
     id<MTLDevice> dev = (__bridge id<MTLDevice>)ui_metal_device();
     MTLTextureDescriptor *td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
                                                                                    width:w height:h mipmapped:NO];
@@ -68,7 +68,7 @@ void splash_load(void) {
 
 void splash_unload(void) {
     if (!g_tex) return;
-#ifdef __APPLE__
+#ifdef SW_METAL
     g_mtl_tex = nil;
 #else
     vk_imgui_texture_free((uint64_t)g_tex);

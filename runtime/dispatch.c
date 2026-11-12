@@ -9,6 +9,7 @@
 #include "gamelib.h"
 #include "hle.h"
 #include "kernel.h"
+#include "mods.h"
 
 typedef struct { const uint64_t *addrs; const GuestFn *fns; uint64_t count, lo, hi; } FnTable;
 static FnTable tables[MAX_MODULES];  // one per module of the game code (runtime/gamelib.h)
@@ -137,8 +138,24 @@ GuestFn dispatch_lookup(uint64_t addr) {
 #define DCACHE 4096
 static __thread struct { uint64_t addr; GuestFn fn; } dcache[DCACHE];
 
+// The function at pc as the game code and the host functions have it, without a mod's hooks (runtime/mods.h)
+GuestFn dispatch_resolve(uint64_t pc) {
+    if (pc >= HLE_BASE && pc < HLE_BASE + HLE_SIZE) {
+        uint64_t i = (pc - HLE_BASE) / 16;
+        return i < (uint64_t)hle_count ? hle_slots[i].fn : NULL;
+    }
+    for (int i = 0; i < override_count; i++)
+        if (overrides[i].addr == pc) return overrides[i].fn;
+    return dispatch_lookup(pc);
+}
+void dispatch_flush(void) { memset(dcache, 0, sizeof dcache); }
+
 static GuestFn dispatch_slow(Cpu *c) {
     uint64_t pc = c->pc;
+    {   // a mod's hook on this function, or the original of one (not cached below: asked every time)
+        GuestFn hooked = mods_dispatch(pc);
+        if (hooked) return hooked;
+    }
     if (pc >= HLE_BASE && pc < HLE_BASE + HLE_SIZE) {
         rt_unwind_point();  // (HLE calls aren't cached below, so every one passes here: a reboot's safe point)
         int i = (int)((pc - HLE_BASE) / 16);

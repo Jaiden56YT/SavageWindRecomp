@@ -692,9 +692,12 @@ def _grass_blade_lateral(gen, a):
     w = _word(gen, a)
     assert w in (0x1e262000, 0x1e272000), hex(w)  # fcmp s0, s6 / fcmp s0, s7
     n = (w >> 16) & 31
+    # (plain C, no simd.h: the AArch64 hosts' generated code has FP as inline asm and doesn't include it)
     return ('{ extern float rt_grass_blade_lateral(int, float, float, float, float, uint32_t, uint32_t); '
-            f'c->nzcv = cmp_s(c, VSF32(0), rt_grass_blade_lateral({n - 6}, VSF32({n}), VSF32(9), VSF32(13), VSF32(21), '
-            'LD32(c->sp + 0x204), LD32(c->sp + 0x208))); }'
+            f'union {{ uint32_t u; float f; }} d = {{ .u = (uint32_t)c->v[0] }}, w = {{ .u = (uint32_t)c->v[{n}] }}, '
+            'x = { .u = (uint32_t)c->v[9] }, z = { .u = (uint32_t)c->v[13] }, q = { .u = (uint32_t)c->v[21] }; '
+            f'float lim = rt_grass_blade_lateral({n - 6}, w.f, x.f, z.f, q.f, LD32(c->sp + 0x204), LD32(c->sp + 0x208)); '
+            'c->nzcv = d.f != d.f || lim != lim ? 0x30000000u : d.f == lim ? 0x60000000u : d.f < lim ? 0x80000000u : 0x20000000u; }'
             f'  /* {a:#x}: fcmp s0, s{n} (grass blades: a cell inside the region\'s width) */')
 
 

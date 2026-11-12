@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "mods.h"
 #include "game_versions.h"
 #include "gamelib.h"
 #include "lz4.h"
@@ -161,6 +162,12 @@ static uint64_t resolve(Module *m, uint32_t symidx) {
     Elf64Sym *s = sym(m, symidx);
     const char *name = symname(m, s);
     if (s->shndx) return m->base + s->value;
+    if (mods_is_mod(m)) {  // what this runtime has for mods only (runtime/mods.c: sockets, the network's state)
+        char scoped[1100];
+        snprintf(scoped, sizeof scoped, "mod:%s", name);
+        HostFn mod_impl = hle_lookup_impl(scoped);
+        if (mod_impl) return hle_register(scoped, mod_impl);
+    }
     HostFn impl = hle_lookup_impl(name);
     if (impl) return hle_register(name, impl);  // host implementation wins over the guest SDK's
     uint64_t a = loader_find_symbol(name);
@@ -230,6 +237,8 @@ static void relocate(Module *m) {
 void loader_load(const char *exefs) {
     char path[1024];
     const GameLibTables *g = gamelib_tables();
+    mods_reset();
+    mods_hooks_reset();
     if (*g->nmodules > MAX_MODULES) FATAL("the game code has %u modules\n", *g->nmodules);
     for (uint32_t i = 0; i < *g->nmodules; i++) {
         Module *m = &g_modules[g_nmodules++];
@@ -237,6 +246,7 @@ void loader_load(const char *exefs) {
         m->name = g->modules[i].name;
         snprintf(path, sizeof path, "%s/%s", exefs, m->name);
         load_nso(m, path, &g->modules[i]);
+        mods_module_loaded(m, path);
     }
     // A subsdk the code doesn't have: other game files than it was built from, unless main is a known game version,
     // whose code leaves out the subsdks that aren't the game's (a mod copied into the ExeFS, #165; tools/layout.py

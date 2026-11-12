@@ -67,11 +67,25 @@ FFMPEG   := $(or $(DEPS),/opt/homebrew/opt/ffmpeg)
 EXE      := $(B)/savagewind
 DEPINC   := -I$(SDL)/include -I$(FFMPEG)/include
 LDFLAGS  := -L$(SDL)/lib -lSDL3 -Wl,-rpath,$(SDL)/lib -L$(FFMPEG)/lib -lavformat -lavcodec -lavutil -lswscale -Wl,-rpath,$(FFMPEG)/lib \
-            -framework CoreFoundation -framework Foundation -framework Metal -framework MetalFX -framework QuartzCore -framework AppKit -framework ImageIO -framework CoreGraphics -framework UniformTypeIdentifiers
+            -framework CoreFoundation -framework Foundation -framework Metal -framework MetalFX -framework QuartzCore -framework AppKit -framework ImageIO -framework CoreGraphics -framework UniformTypeIdentifiers -lz
+# MAC_VULKAN=1: the Vulkan backend (what the game is developed on) through MoltenVK, instead of the Metal one, which
+# is LAS Recomp's and lacks most of what this game draws with. Homebrew: molten-vk vulkan-loader vulkan-headers shaderc.
+MAC_VULKAN ?= 0
+ifeq ($(MAC_VULKAN),1)
+BREW     := /opt/homebrew
+DEPINC   += -I$(BREW)/include
+LDFLAGS  += -L$(BREW)/lib -lvulkan -lshaderc_shared -Wl,-rpath,$(BREW)/lib
+BACKEND_SRC := $(wildcard runtime/nvn/vulkan/*.c) $(wildcard runtime/nvn/vulkan/*.cpp)
+BACKEND_OBJ := $(patsubst runtime/%.cpp,$(B)/rt/%.o,$(patsubst runtime/%.c,$(B)/rt/%.o,$(BACKEND_SRC)))
+IMGUI_OBJ += $(B)/imgui/imgui_impl_vulkan.o
+UIFLAGS  := -x c++
+else
+OSFLAGS  := -DSW_METAL=1
 BACKEND_SRC := $(wildcard runtime/nvn/*.m)
 BACKEND_OBJ := $(patsubst runtime/%.m,$(B)/rt/%.o,$(BACKEND_SRC))
 IMGUI_OBJ += $(B)/imgui/imgui_impl_metal.o
-UIFLAGS  := -fobjc-arc
+UIFLAGS  := -fobjc-arc $(OSFLAGS)
+endif
 GAMELIB  := $(B)/swgame.dylib
 GAMELIB_LDFLAGS := -dynamiclib -undefined dynamic_lookup  # (the runtime functions it calls: the app's own)
 GAMELIB_SHARED := -shared -Wl,-undefined,dynamic_lookup  # (the same, for the start screen's build: zig cc)
@@ -244,7 +258,7 @@ FFX_SRC  := $(FFX)/sdk/src/components/frameinterpolation/ffx_frameinterpolation.
             $(wildcard $(FFX)/sdk/src/shared/*.cpp)
 FFX_OBJ  := $(patsubst $(FFX)/sdk/src/%.cpp,$(B)/ffx/%.o,$(FFX_SRC))
 FFX_INC  := -I$(FFX)/sdk/include -I$(FFX)/sdk/src/components -I$(FFX)/sdk/src/shared -I$(FFX)/sdk/src/backends/shared
-ifneq ($(PLATFORM),macos)
+ifneq ($(PLATFORM)$(MAC_VULKAN),macos0)
 BACKEND_OBJ += $(FFX_OBJ)
 $(B)/rt/nvn/vulkan/fsr3.o: CXXFLAGS := -DSW_FSR3=1 -include $(FFX)/ffx_compat.h $(FFX_INC) $(CXXFLAGS)
 endif

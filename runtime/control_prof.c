@@ -21,6 +21,9 @@
 #else
 #include <sys/resource.h>
 #include <time.h>
+#ifdef __APPLE__
+#include <mach/mach.h>
+#endif
 #endif
 
 // sampler.c (the legacy `sample` command): status is a static string; start returns NULL on success, an error otherwise.
@@ -204,6 +207,12 @@ static double thread_cpu_ms(pthread_t th, double tsc_per_ms) {
     HANDLE h = (HANDLE)pthread_gethandle(th);
     if (!h || !QueryThreadCycleTime(h, &cycles)) return -1;
     return (double)cycles / tsc_per_ms;
+#elif defined(__APPLE__)  // (no pthread_getcpuclockid on macOS: the Mach thread's own times)
+    (void)tsc_per_ms;
+    thread_basic_info_data_t bi;
+    mach_msg_type_number_t n = THREAD_BASIC_INFO_COUNT;
+    if (thread_info(pthread_mach_thread_np(th), THREAD_BASIC_INFO, (thread_info_t)&bi, &n) != KERN_SUCCESS) return -1;
+    return (bi.user_time.seconds + bi.system_time.seconds) * 1e3 + (bi.user_time.microseconds + bi.system_time.microseconds) / 1e3;
 #else
     (void)tsc_per_ms;
     clockid_t id;

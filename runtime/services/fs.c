@@ -223,8 +223,55 @@ static void add_new_files(const uint64_t *h, const uint8_t *dmeta, uint64_t dsz,
     memcpy(meta, base_meta, fsz);
     free(tmp);
     if (!R->ov_end) R->ov_end = (romfs_image_size(R->img) + 0xF) & ~0xFull;
-    uint64_t meta_at = R->ov_end;  // the new table first, then the new files' data
-    uint64_t data_at = (meta_at + nsz + 0xF) & ~0xFull;
+    // Directories the game's RomFS doesn't have (a mod's own folder): appended to a copy of the directory table,
+    // linked under their parent and into the directory hash table; the bigger table then goes past the image's end
+    // like the file table (dnew > dsz below).
+    uint64_t dhoff = h[1], dhsz = h[2], dnew = dsz;
+    uint8_t *dhcopy = NULL;
+    for (int i = 0; i < n; i++) {
+        char dirp[1024];
+        strlcpy(dirp, nf[i].rel, sizeof dirp);
+        char *slash = strrchr(dirp, '/');
+        if (!slash) continue;
+        *slash = 0;
+        if (dir_lookup(dcopy, dnew, dirp) >= 0) continue;
+        uint32_t cur = 0;
+        for (char *tok = strtok(dirp, "/"); tok; tok = strtok(NULL, "/")) {
+            uint32_t child, tl = (uint32_t)strlen(tok);
+            memcpy(&child, dcopy + cur + 8, 4);
+            while (child != 0xFFFFFFFFu && child + 0x18 <= dnew) {
+                uint32_t nl;
+                memcpy(&nl, dcopy + child + 0x14, 4);
+                if (nl == tl && !memcmp(dcopy + child + 0x18, tok, nl)) break;
+                memcpy(&child, dcopy + child + 4, 4);
+            }
+            if (child != 0xFFFFFFFFu && child + 0x18 <= dnew) { cur = child; continue; }
+            if (!dhcopy) {
+                dhcopy = malloc(dhsz);
+                if (romfs_image_pread(R->img, dhcopy, dhsz, dhoff) != (ssize_t)dhsz) return;
+            }
+            uint32_t esz = 0x18 + ((tl + 3) & ~3u), entry = (uint32_t)dnew, none = 0xFFFFFFFFu, sibling, prev;
+            dcopy = realloc(dcopy, dnew + esz);
+            memset(dcopy + dnew, 0, esz);
+            memcpy(&sibling, dcopy + cur + 8, 4);  // the parent's first directory -> becomes our sibling
+            uint32_t bucket = romfs_hash(cur, tok, tl) % (uint32_t)(dhsz / 4);
+            memcpy(&prev, dhcopy + 4 * bucket, 4);
+            memcpy(dcopy + entry, &cur, 4);
+            memcpy(dcopy + entry + 4, &sibling, 4);
+            memcpy(dcopy + entry + 8, &none, 4);
+            memcpy(dcopy + entry + 0xC, &none, 4);
+            memcpy(dcopy + entry + 0x10, &prev, 4);
+            memcpy(dcopy + entry + 0x14, &tl, 4);
+            memcpy(dcopy + entry + 0x18, tok, tl);
+            memcpy(dcopy + cur + 8, &entry, 4);
+            memcpy(dhcopy + 4 * bucket, &entry, 4);
+            dnew += esz;
+            cur = entry;
+        }
+    }
+    uint64_t meta_at = R->ov_end;  // the new tables first, then the new files' data
+    uint64_t dmeta_at = (meta_at + nsz + 0xF) & ~0xFull;
+    uint64_t data_at = dnew > dsz ? (dmeta_at + dnew + 0xF) & ~0xFull : dmeta_at;
     uint32_t nb = (uint32_t)(hsz / 4);
     uint64_t o = fsz;
     int added = 0;
@@ -234,7 +281,7 @@ static void add_new_files(const uint64_t *h, const uint8_t *dmeta, uint64_t dsz,
         char *slash = strrchr(dirp, '/');
         const char *name = slash ? slash + 1 : nf[i].rel;
         if (slash) *slash = 0; else dirp[0] = 0;
-        int64_t dir = dir_lookup(dcopy, dsz, dirp);
+        int64_t dir = dir_lookup(dcopy, dnew, dirp);
         if (dir < 0) { LOG("[fs] overlay file %s: directory not in the game's RomFS, skipped\n", nf[i].rel); continue; }
         uint32_t nl = (uint32_t)strlen(name), d32 = (uint32_t)dir, entry = (uint32_t)o, child;
         memcpy(&child, dcopy + dir + 0xC, 4);  // dir's first file -> becomes our sibling
@@ -262,12 +309,22 @@ static void add_new_files(const uint64_t *h, const uint8_t *dmeta, uint64_t dsz,
     memmove(R->ov + (R->ov_n - added) + 1, R->ov + (R->ov_n - added), sizeof *R->ov * added);
     R->ov[R->ov_n - added] = (Overlay){meta_at, nsz, NULL, -1, meta};
     R->ov_n++;
+    if (dnew > dsz) {  // the grown directory table: after the file table, before the data
+        if (R->ov_n == R->ov_cap) { R->ov_cap = R->ov_cap ? R->ov_cap * 2 : 256; R->ov = realloc(R->ov, sizeof *R->ov * R->ov_cap); }
+        memmove(R->ov + (R->ov_n - added) + 1, R->ov + (R->ov_n - added), sizeof *R->ov * added);
+        R->ov[R->ov_n - added] = (Overlay){dmeta_at, dnew, NULL, -1, dcopy};
+        R->ov_n++;
+        memcpy(head + 3 * 8, &dmeta_at, 8);
+        memcpy(head + 4 * 8, &dnew, 8);
+        R->patches[R->npatches++] = (Patch){dhoff, dhsz, dhcopy};
+        LOG("[fs] overlay: new romfs directories (%llu bytes of entries)\n", (unsigned long long)(dnew - dsz));
+    }
     R->ov_end = data_at;
     uint64_t fmeta_off = meta_at, fmeta_size = o;
     memcpy(head + 7 * 8, &fmeta_off, 8);
     memcpy(head + 8 * 8, &fmeta_size, 8);
     R->patches[R->npatches++] = (Patch){0, 0x50, head};
-    R->patches[R->npatches++] = (Patch){h[3], dsz, dcopy};
+    if (dnew == dsz) R->patches[R->npatches++] = (Patch){h[3], dsz, dcopy};
     R->patches[R->npatches++] = (Patch){hoff, hsz, hcopy};
     LOG("[fs] overlay: %d new romfs files\n", added);
 }

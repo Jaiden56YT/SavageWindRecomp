@@ -153,7 +153,12 @@ class Module:
     def boundaries(self):
         n, b = self.nso, self.base
         starts = set()
-        for a in eh_frame_functions(n):
+        try:
+            for a in eh_frame_functions(n):
+                starts.add(b + a)
+        except (ValueError, struct.error, IndexError):  # (a mod's module: no search table the SDK's linker writes)
+            pass
+        for a in getattr(self, 'extra_starts', ()):  # (a mod: its manifest's functions)
             starts.add(b + a)
         for name, info, shndx, value, size in n.syms:
             if shndx and (info & 0xF) == 2:
@@ -431,7 +436,9 @@ class Module:
                     # (a target outside this piece of a split function is a boundary, reached by a tail call)
                     for t in jt:
                         (labels if entry <= t < end else ext).add(t)
-                elif self.computed_target(a, (self.fde(a) or (entry,))[0]):
+                elif getattr(self, 'is_mod', False) or self.computed_target(a, (self.fde(a) or (entry,))[0]):
+                    # (a mod: every br the table forms above don't know - another compiler's switches - may be one;
+                    #  a tail call among them leaves through the same fallback's dispatch)
                     # unresolved table jump: allow jumping to any instruction of the function
                     tables[a] = 'all'
             terminated = ins.kind in ('b', 'br', 'ret', 'trap')
@@ -805,13 +812,81 @@ def main_sites(nso, base, opts):
     return game_sites.for_module(nso, base, opts.any_version, lambda s: print(s, file=sys.stderr))
 
 
-def generate(name, nso, base, outdir, opts, sites=None):
+# A mod's functions the runtime does itself (runtime/mods.c hle_mod_<name>): exlaunch's start-up, which reads the
+# console's memory map and maps the game's code writable, and its hooking, which writes branches into that code -
+# neither means anything to code that was recompiled ahead of time. Found by name in the mod's manifest.
+MOD_HLE = {'exl_init', '_ZN3exl4hook4nx6410InitializeEv', '_ZN3exl4hook4nx644HookEmmb'}
+
+
+def mod_manifest(nso_path):
+    """{name: offset} of a mod's manifest (<module>.mod: `nm` lines, "<hex address> <type> <name>"); None without one"""
+    path = nso_path + '.mod'
+    if not os.path.isfile(path):
+        return None
+    out = {}
+    for l in open(path):
+        f = l.split()
+        if len(f) == 3 and re.fullmatch(r'[0-9a-fA-F]+', f[0]):
+            out[f[2]] = int(f[0], 16)
+    return out
+
+
+def read_hooks(exefs, lay):
+    """Guest addresses of the functions a mod may hook (<exefs>/hooks.txt: `<module>+<hex offset>` or a hex address
+    per line, # comments), in a fixed order: the index of each is its slot in the game code's game_hook_slots."""
+    path = os.path.join(exefs, 'hooks.txt')
+    bases = {n: b for n, b, *_ in lay}
+    out = set()
+    if os.path.isfile(path):
+        for l in open(path):
+            l = l.split('#')[0].strip()
+            if not l:
+                continue
+            mm = re.fullmatch(r'(\w+)\+(?:0x)?([0-9a-fA-F]+)', l)
+            if mm and mm.group(1) in bases:
+                out.add(bases[mm.group(1)] + int(mm.group(2), 16))
+            elif re.fullmatch(r'(?:0x)?[0-9a-fA-F]+', l):
+                out.add(int(l, 16))
+            else:
+                print(f'hooks.txt: skipped "{l}"', file=sys.stderr)
+    return {a: i for i, a in enumerate(sorted(out))}
+
+
+def write_hooks(outdir, hooks, made):
+    """generated/hooks.c: the hookable functions' addresses and their bodies (0: not a function of the game code)"""
+    order = sorted(hooks, key=hooks.get)
+    # (exported by name: the runtime finds them with dlsym / GetProcAddress, runtime/gamelib.c. The slots are the
+    #  library's own data, not the app's: a Windows DLL reads its own data without an import)
+    text = ['#include "cpu.h"\n',
+            '#if defined(_WIN32)\n#define HOOK_EXPORT __declspec(dllexport)\n#else\n'
+            '#define HOOK_EXPORT __attribute__((visibility("default")))\n#endif\n']
+    text += [f'void {fname(a)}_orig(Cpu *c);\n' for a in order if a in made]
+    text.append('HOOK_EXPORT const uint64_t game_hook_addrs[] = {' + ', '.join([hx(a) for a in order] + ['0']) + '};\n')
+    text.append('HOOK_EXPORT const GuestFn game_hook_origs[] = {' +
+                ', '.join([f'{fname(a)}_orig' if a in made else '0' for a in order] + ['0']) + '};\n')
+    text.append(f'HOOK_EXPORT const uint32_t game_hook_count = {len(order)};\n')
+    text.append(f'HOOK_EXPORT uint64_t game_hook_slots[{len(order) + 1}];  // a mod\'s callback for each (0: none)\n')
+    write_if_changed(os.path.join(outdir, 'hooks.c'), ''.join(text))
+
+
+def generate(name, nso, base, outdir, opts, sites=None, hooks=None):
+    hooks = hooks or {}
+    made = set()  # the hookable functions this module has
     t0 = time.time()
     loc = Locals(opts.reg_locals, not opts.no_callee_saved_trust) if opts.locals and opts.reg_locals >= 0 else None
     m = Module(name, nso, base, opts.simd, loc)
     if name == 'main':
         m.sites = sites if sites is not None else main_sites(m.nso, base, opts)[1]
         m.patches = patches.table(m.sites) if m.sites else {}
+    if os.path.isfile(nso + '.mod'):  # (a mod: the functions its manifest names, local ones too)
+        m.extra_starts = [int(f[0], 16) for f in (l.split() for l in open(nso + '.mod'))
+                          if len(f) == 3 and f[1] in 'tTwW' and not f[2].startswith('$')]
+        m.is_mod = True
+        # its functions' extents, from the manifest (no unwind table to read them from): what jump tables are
+        # resolved within, whose bases are often set at the function's start
+        ext = sorted(set(m.extra_starts)) + [m.nso.text[1]]
+        m.fdes = [(base + a, base + b) for a, b in zip(ext, ext[1:]) if a < m.nso.text[1]]
+        m.fde_starts = [a for a, _ in m.fdes]
     starts = m.boundaries()
     hle = {}
     if opts.hle and os.path.exists(opts.hle):
@@ -819,6 +894,13 @@ def generate(name, nso, base, outdir, opts, sites=None):
         for sym, info, shndx, value, size in m.nso.syms:
             if shndx and sym in want:
                 hle[base + value] = sym
+
+    man = mod_manifest(nso)
+    if man is not None:
+        for sym in MOD_HLE:
+            if sym in man:
+                hle[base + man[sym]] = 'mod_' + sym
+        print(f'{name}: a mod, {len([s for s in MOD_HLE if s in man])} of its functions are the runtime\'s', file=sys.stderr)
 
     entries, rounds = discover(m, starts)
     print(f'{name}: {len(starts)} boundaries, {len(entries)} functions, {rounds} rounds, {dict(m.stats)}, '
@@ -844,6 +926,17 @@ def generate(name, nso, base, outdir, opts, sites=None):
                 lines = m.emit_function(a, end, labels, tables, hle)
                 r = getattr(m, '_refs', set())
                 m._refs = set()
+                if a in hooks and a not in hle:
+                    # hookable (hooks.txt): the body under another name, and in its place a check of the mod's hook
+                    # for it - every call arrives here, direct ones included, which never pass the dispatcher
+                    head = f'void {fname(a)}(Cpu *c) {{'
+                    if lines[0] != head:
+                        raise SystemExit(f'gen.py: hookable {a:#x}: unexpected function head {lines[0]!r}')
+                    lines = [f'void {fname(a)}(Cpu *c);', f'void {fname(a)}_orig(Cpu *c) {{'] + lines[1:] + [
+                        f'void {fname(a)}(Cpu *c) {{ extern uint64_t game_hook_slots[]; uint64_t h = game_hook_slots[{hooks[a]}]; '
+                        'if (__builtin_expect(h != 0, 0)) { c->pc = h; __attribute__((musttail)) return rt_dispatch(c); } '
+                        f'__attribute__((musttail)) return {fname(a)}_orig(c); }}']
+                    made.add(a)
             n = sum(len(l) + 1 for l in lines)
             if n > opts.big_fn and fns:  # (a big function gets a file of its own: they compile in parallel)
                 pending = (a, lines, r)
@@ -887,6 +980,7 @@ def generate(name, nso, base, outdir, opts, sites=None):
         st = {k: v for k, v in sorted(m.stats.items()) if k.startswith(('local_', 'flag_', 'reg_'))}
         print(f'{name}: locals {st}', file=sys.stderr)
     print(f'{name}: wrote {nchunks} chunks, {time.time() - t0:.0f}s total', file=sys.stderr)
+    return made
 
 
 def main():
@@ -934,10 +1028,14 @@ def main():
                     if n not in present and os.path.isdir(os.path.join(outdir, n)):
                         shutil.rmtree(os.path.join(outdir, n))
                 hle = args.hle
+                hooks, made = read_hooks(exefs, lay), set()
                 for n, base, size, build_id in lay:
                     args.hle = hle if n != 'main' else None
-                    generate(n, os.path.join(exefs, n), base, os.path.join(outdir, n), args,
-                             sites if n == 'main' else None)
+                    made |= generate(n, os.path.join(exefs, n), base, os.path.join(outdir, n), args,
+                                     sites if n == 'main' else None, hooks)
+                for a in sorted(set(hooks) - made):
+                    print(f'hooks.txt: {a:#x} is not the start of a function: not hookable', file=sys.stderr)
+                write_hooks(outdir, hooks, made)
             return
         lay = {n: (b, i) for n, b, s, i in layout.read(args.paths[0])}
         if args.name not in lay:

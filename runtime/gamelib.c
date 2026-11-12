@@ -163,6 +163,11 @@ bool gamelib_present(const char *game_dir) {
     return false;
 }
 
+const uint64_t *g_game_hook_addrs;
+const GuestFn *g_game_hook_origs;
+uint64_t *g_game_hook_slots;  // the game code's own table: a mod's callback for each (0: none)
+uint32_t g_game_hook_count;
+
 static const GameLibTables *open_lib(const char *path) {
 #ifdef _WIN32
     HMODULE h = LoadLibraryA(path);
@@ -174,6 +179,20 @@ static const GameLibTables *open_lib(const char *path) {
     GameLibEntry entry = (GameLibEntry)dlsym(h, GAMELIB_ENTRY);
 #endif
     if (!entry) { snprintf(g_error, sizeof g_error, "%s: not game code", path); return NULL; }
+    {   // the functions a mod may hook (generated hooks.c; runtime/mods.c). A library made before them has none.
+#ifdef _WIN32
+#define LIB_SYM(n) ((void *)GetProcAddress(h, n))
+#else
+#define LIB_SYM(n) dlsym(h, n)
+#endif
+        const uint64_t *a = (const uint64_t *)LIB_SYM("game_hook_addrs");
+        const GuestFn *o = (const GuestFn *)LIB_SYM("game_hook_origs");
+        const uint32_t *n = (const uint32_t *)LIB_SYM("game_hook_count");
+        uint64_t *slots = (uint64_t *)LIB_SYM("game_hook_slots");
+#undef LIB_SYM
+        g_game_hook_count = 0;
+        if (a && o && n && slots) g_game_hook_addrs = a, g_game_hook_origs = o, g_game_hook_slots = slots, g_game_hook_count = *n;
+    }
     const GameLibTables *t = entry();
     if (!t || t->abi != GAMELIB_ABI || !t->id || strcmp(t->id, gamelib_id())) {
         snprintf(g_error, sizeof g_error, "%s was built for another version", path);

@@ -208,6 +208,7 @@ static void dump_largest_textures(const char *why) {
 
 static uint64_t frames, total_frames;
 uint64_t renderer_present_count(void) { return total_frames; }
+uint64_t vk_completed_seq(void) { return 0; }  // (the Vulkan backend's GPU progress, only logged by the sync timeline)
 bool control_camera_view(float view[12]) { (void)view; return false; }  // (the control endpoint's `camera`: not on Metal yet)
 bool control_shot_now(const char *path) { (void)path; return false; }  // (the control endpoint's `shot`: not on Metal yet)
 

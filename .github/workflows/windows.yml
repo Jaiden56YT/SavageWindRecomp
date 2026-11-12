@@ -7,7 +7,7 @@ name: Windows
 
 on:
   push:
-    branches: [test, main]
+    branches: [test, main, coop-mods]
   pull_request:
     branches: [test, main]
   workflow_dispatch:
