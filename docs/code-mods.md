@@ -15,6 +15,14 @@ Nothing here is supported by the Savage Wind authors: don't report problems with
 | Windows | **Never run.** The app builds on Windows (this branch's `Windows` check on GitHub, the MSYS2 build), and the mod's generated code compiles for it (portable C for floating point, as on every x86 PC). The game code with a mod in it has not been built or started there: the socket code and the hook table's export are written for Windows and untested. |
 | Linux | Never run. |
 
+## Installing the co-op mod
+
+```bat
+install-coop.cmd "C:\path\to\base game.nsp" "C:\path\to\1.9.0 update.nsp"
+```
+
+(`./install-coop.sh` on a Mac.) It installs the build tools on Windows if they're missing (`tools/setup_windows.ps1`), downloads the newest release of the [co-op mod](https://github.com/Jaiden56YT/botw-coop/releases) into `coop/package`, and runs its setup with `--recomp`: your dump is read into `extracted/`, the mod's game files go to `coop/romfs`, the mod's code into `extracted/exefs`, and Savage Wind is built. Then `play-coop.cmd` starts it. Run it again to update. The player guide is the mod's [docs/RECOMP.md](https://github.com/Jaiden56YT/botw-coop/blob/main/docs/RECOMP.md).
+
 ## How a mod gets in
 
 A mod is part of the built game code, not a file dropped next to the app:
