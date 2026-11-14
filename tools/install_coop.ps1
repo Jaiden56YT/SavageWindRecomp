@@ -426,7 +426,10 @@ function Step-BuildTools {
     if (Test-BuildTools) { Write-Info 'MSYS2 and Python are there.'; return }
     Write-Info 'Installing MSYS2 and Python 3.12 (once; this takes a while, and Windows may ask for permission)'
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root 'tools\setup_windows.ps1')
-    if ($LASTEXITCODE -ne 0 -or -not (Test-BuildTools)) { Stop-Setup 'installing the build tools failed: see the messages above. Running this again carries on.' }
+    $rc = $LASTEXITCODE
+    if (-not (Test-BuildTools)) { Stop-Setup 'installing the build tools failed: see the messages above. Running this again carries on.' }
+    # (its last step sets git's line endings for a clone; a folder downloaded as a zip on a PC without Git fails it, harmlessly)
+    if ($rc -ne 0) { Write-Warn 'The tools setup ended with an error after installing everything (see above); carrying on.' }
 }
 
 function Step-Keys {
