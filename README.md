@@ -3,7 +3,7 @@
 > [!NOTE]
 > **This is a fork**, branch `coop-mods`: Savage Wind with a loader for code mods (written for the
 > [BotW co-op mod](https://github.com/Jaiden56YT/botw-coop)) and a Vulkan build for macOS. See
-> [docs/code-mods.md](docs/code-mods.md); to play co-op, run `install-coop.cmd` with your game files. It is not supported by the Savage Wind authors, and it has never been run on
+> [docs/code-mods.md](docs/code-mods.md); to play co-op on Windows, run `Install BotW Co-op.cmd` (a window asks for your game files) and later `Update BotW Co-op.cmd`. It is not supported by the Savage Wind authors, and it has never been run on
 > Windows or Linux. The original project is [Revivedx/SavageWindRecomp](https://github.com/Revivedx/SavageWindRecomp).
 
 > [!IMPORTANT]

@@ -17,11 +17,11 @@ Nothing here is supported by the Savage Wind authors: don't report problems with
 
 ## Installing the co-op mod
 
-```bat
-install-coop.cmd "C:\path\to\base game.nsp" "C:\path\to\1.9.0 update.nsp"
-```
+On Windows, run **`Install BotW Co-op.cmd`**. A window asks for your base game (`.nsp`/`.xci`), its 1.9.0 update and your `prod.keys` (filled in when Ryujinx or an earlier run has them; each gets a line saying what was found), and your co-op name, server, port and password. **Install** then opens a console that does the rest: the build tools if they're missing (`tools/setup_windows.ps1`), the newest release of the [co-op mod](https://github.com/Jaiden56YT/botw-coop/releases) into `coop/package`, its setup with `--recomp` (your dump read into `extracted/`, the mod's game files into `coop/romfs`, its code into `extracted/exefs`), the build, your settings into `coop/romfs/botw-coop/config.ini`, and a desktop shortcut to `play-coop.cmd` if you asked for one.
 
-(`./install-coop.sh` on a Mac.) It installs the build tools on Windows if they're missing (`tools/setup_windows.ps1`), downloads the newest release of the [co-op mod](https://github.com/Jaiden56YT/botw-coop/releases) into `coop/package`, and runs its setup with `--recomp`: your dump is read into `extracted/`, the mod's game files go to `coop/romfs`, the mod's code into `extracted/exefs`, and Savage Wind is built. Then `play-coop.cmd` starts it. Run it again to update. The player guide is the mod's [docs/RECOMP.md](https://github.com/Jaiden56YT/botw-coop/blob/main/docs/RECOMP.md).
+**`Update BotW Co-op.cmd`** shows the installed co-op version and Savage Wind commit next to the newest ones on GitHub, and updates and builds again. With "Also update Savage Wind" ticked it updates this folder too: `git pull` in a clone, else the branch's zip copied over it (`extracted`, `save`, `coop` and the builds are left alone).
+
+Both are `tools/install_coop.ps1`. Without a window: `install-coop.cmd "C:\path\to\base game.nsp" "C:\path\to\1.9.0 update.nsp"`. On a Mac, `./install-coop.sh` with the same two files. The player guide is the mod's [docs/RECOMP.md](https://github.com/Jaiden56YT/botw-coop/blob/main/docs/RECOMP.md).
 
 ## How a mod gets in
 

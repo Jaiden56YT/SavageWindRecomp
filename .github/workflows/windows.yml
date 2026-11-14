@@ -39,3 +39,33 @@ jobs:
             mingw-w64-ucrt-x86_64-spirv-tools mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-nasm
       - name: Build
         run: make -j$(nproc) && ls -l build/savagewind.exe build/savagewind.dll.a
+
+  # The co-op installer's windows (tools/install_coop.ps1), drawn on a real Windows: a syntax check of the script,
+  # then each window saved as a picture (-Snapshot: drawn, then closed without doing anything). No game files.
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Parse
+        shell: powershell
+        run: |
+          $errs = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD\tools\install_coop.ps1", [ref]$null, [ref]$errs) | Out-Null
+          if ($errs) { $errs | ForEach-Object { Write-Host $_ }; exit 1 }
+      - name: Install window
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\install_coop.ps1 -Snapshot "$PWD\install-window.png"
+      - name: Update window
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force extracted\exefs, extracted\romfs\Pack | Out-Null
+          Set-Content extracted\exefs\main x
+          Set-Content extracted\romfs\Pack\Bootup.pack x
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools\install_coop.ps1 -Update -Snapshot "$PWD\update-window.png"
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools\install_coop.ps1 -Snapshot "$PWD\install-window-set-up.png"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-windows
+          path: '*.png'
+          if-no-files-found: error
