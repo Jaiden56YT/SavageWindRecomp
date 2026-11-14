@@ -233,7 +233,7 @@ function Save-Snapshot {
 function Show-InstallWindow {
     <# @{BaseGame; GameUpdate; Keys; Name; Server; Port; Password; Shortcut}, or $null if cancelled #>
     param([hashtable]$Start)
-    $form = New-Form "$Title - setup" 760 600
+    $form = New-Form "$Title - setup" 760 650
     Add-Label $form ("Savage Wind is built on this PC from your own copy of the game, with the co-op mod in it. Choose your files " +
         "(what was found on this PC is filled in); the line under each says what was found.") 16 12 728 40 | Out-Null
 
@@ -291,9 +291,9 @@ function Show-InstallWindow {
     $form.Controls.Add($port)
     $fields['Port'] = $port
     $y += 30
-    $hint = Add-Label $form "Server: the address of the computer running the relay (127.0.0.1 if it's this one). The same password puts you in the same game." 16 $y 728 22
+    $hint = Add-Label $form "Server: the address of the computer running the relay (127.0.0.1 if it's this one). The same password puts you in the same game." 16 $y 728 40
     $hint.ForeColor = [Drawing.Color]::DimGray
-    $y += 30
+    $y += 46
 
     $shortcut = New-Object Windows.Forms.CheckBox
     $shortcut.Text = "Put a 'Play BotW Co-op' shortcut on the desktop"
@@ -303,11 +303,11 @@ function Show-InstallWindow {
     $form.Controls.Add($shortcut)
     $y += 30
     $note = Add-Label $form ('Then a console window does the work: the build tools (the first time; Windows may ask for permission), ' +
-        'the newest co-op mod from GitHub, your game files, and the build (20 to 40 minutes the first time). To update later, run Update BotW Co-op.cmd.') 16 $y 728 40
+        'the newest co-op mod from GitHub, your game files, and the build (20 to 40 minutes the first time). To update later, run Update BotW Co-op.cmd.') 16 $y 728 60
     $note.ForeColor = [Drawing.Color]::DimGray
 
-    $ok = Add-Button $form 'Install' 488 554 150
-    $cancel = Add-Button $form 'Cancel' 644 554 100
+    $ok = Add-Button $form 'Install' 488 604 150
+    $cancel = Add-Button $form 'Cancel' 644 604 100
     $cancel.DialogResult = [Windows.Forms.DialogResult]::Cancel
     $form.CancelButton = $cancel
     $form.AcceptButton = $ok
@@ -378,38 +378,38 @@ function Get-Latest {
 function Show-UpdateWindow {
     <# @{Source = bool}, or $null if closed #>
     param([hashtable]$Latest)
-    $form = New-Form "$Title - update" 640 330
+    $form = New-Form "$Title - update" 720 330
     $installed = Get-InstalledVersion
     $commit = Get-SourceCommit
     Add-Label $form 'Co-op mod' 16 16 200 20 -Bold | Out-Null
     $iv = if ($installed) { $installed } else { 'not installed by this updater yet' }
-    Add-Label $form "Installed:  $iv" 32 40 590 20 | Out-Null
+    (Add-Label $form "Installed:  $iv" 32 40 670 20).AutoEllipsis = $true
     $newest = if ($Latest.ModTag) { "$($Latest.ModName) ($($Latest.ModTag), $($Latest.ModDate))" } else { 'unknown' }
-    Add-Label $form "Newest:      $newest" 32 62 590 20 | Out-Null
+    (Add-Label $form "Newest:      $newest" 32 62 670 20).AutoEllipsis = $true
     $modNew = $Latest.ModTag -and -not $installed.StartsWith("$($Latest.ModTag) ")
 
     Add-Label $form 'Savage Wind (this program)' 16 96 300 20 -Bold | Out-Null
     $cv = if ($commit) { $commit.Substring(0, [Math]::Min(7, $commit.Length)) } else { 'unknown' }
-    Add-Label $form "This folder:  $cv" 32 120 590 20 | Out-Null
+    (Add-Label $form "This folder:  $cv" 32 120 670 20).AutoEllipsis = $true
     $lv = if ($Latest.Commit) { "$($Latest.Commit.Substring(0, 7)) ($($Latest.CommitDate)): $($Latest.CommitText)" } else { 'unknown' }
-    Add-Label $form "Newest:       $lv" 32 142 590 20 | Out-Null
+    (Add-Label $form "Newest:       $lv" 32 142 670 20).AutoEllipsis = $true
     $srcNew = $Latest.Commit -and ($commit -ne $Latest.Commit)
 
     $src = New-Object Windows.Forms.CheckBox
     $src.Text = 'Also update Savage Wind from GitHub (your game files, saves and settings stay)'
     $src.Checked = [bool]$srcNew
     $src.Location = New-Object Drawing.Point(16, 176)
-    $src.Size = New-Object Drawing.Size(608, 24)
+    $src.Size = New-Object Drawing.Size(688, 24)
     $form.Controls.Add($src)
 
     $msg = if ($Latest.Error) { $Latest.Error + ' Updating needs the internet.' }
            elseif ($modNew -or $srcNew) { 'An update is ready. Updating builds the game again (a few minutes; longer if Savage Wind changed). Everyone who plays together needs the same co-op version.' }
            else { "Everything is up to date. 'Update and build' builds the game again anyway." }
-    $status = Add-Label $form $msg 16 210 608 60
+    $status = Add-Label $form $msg 16 210 688 60
     $status.ForeColor = if ($Latest.Error) { [Drawing.Color]::Firebrick } elseif ($modNew -or $srcNew) { [Drawing.Color]::DarkGreen } else { [Drawing.Color]::DimGray }
 
-    $ok = Add-Button $form 'Update and build' 368 284 150
-    $close = Add-Button $form 'Close' 524 284 100
+    $ok = Add-Button $form 'Update and build' 448 284 150
+    $close = Add-Button $form 'Close' 604 284 100
     $close.DialogResult = [Windows.Forms.DialogResult]::Cancel
     $form.CancelButton = $close
     if ($Latest.Error) { $ok.Enabled = $false }
