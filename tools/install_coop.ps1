@@ -440,7 +440,7 @@ function Step-Keys {
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     if ((Test-Path -LiteralPath $dest) -and ((Get-FileHash -LiteralPath $dest).Hash -ne (Get-FileHash -LiteralPath $src).Hash)) {
         Copy-Item -LiteralPath $dest -Destination "$dest.bak" -Force
-        Write-Info "There was another prod.keys in $dir: kept as prod.keys.bak"
+        Write-Info "There was another prod.keys in ${dir}: kept as prod.keys.bak"
     }
     Copy-Item -LiteralPath $src -Destination $dest -Force
     $title = Join-Path (Split-Path -Parent $src) 'title.keys'
